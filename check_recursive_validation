@@ -1,0 +1,95 @@
+#!/usr/bin/perl
+
+# usage
+#
+# define command {
+#   command_name    check-recursive-validation
+#   command_line    /usr/local/libexec/nagios-local/check_recursive_validation -H $HOSTADDRESS$
+# }
+# 
+# define service {
+#   name		dns-recursive-validation
+#   check_command	check-recursive-validation
+#   ...
+# }
+# 
+# define service {
+#   use dns-recursive-validation
+#   host_name 127.0.0.1
+# }
+
+use warnings;
+use strict;
+
+use Getopt::Std;
+use Net::DNS::Resolver;
+use Time::HiRes qw ( gettimeofday tv_interval);
+
+my $start;
+my $stop;
+my %opts = (H=> '127.0.0.1', t=>30, T=>'DNSKEY', Z=>'.');
+
+sub usage {
+	print STDERR "usage: $0 -d -H host -Z zone -T type -t timeout\n";
+	print STDERR "\t-d 		debug\n";
+	print STDERR "\t-H host		host to query, defaults to 127.0.0.1\n";
+	print STDERR "\t-Z zone		zone to query, defaults to .\n";
+	print STDERR "\t-T type		query type, defaults to DNSKEY\n";
+	print STDERR "\t-t seconds	timeout on DNS queries\n";
+	exit 3;
+}
+
+getopts('hH:Z:dt:T:', \%opts) || usage();
+usage() unless $opts{Z};
+usage() if $opts{h};
+
+sub output {
+	my $state = shift;
+	my $msg = shift;
+	$stop = [gettimeofday()] unless $stop;
+	my $latency = tv_interval($start, $stop);
+	printf "%s: %s; (%.2fs) |time=%.6fs;;;0.000000\n",
+		$state,
+		$msg,
+		$latency,
+		$latency;
+}
+
+sub success {
+	output('OK', shift);
+	exit(0);
+}
+
+sub warning {
+	output('WARNING', shift);
+	exit(1);
+}
+
+sub critical {
+	output('CRITICAL', shift);
+	exit(2);
+}
+
+$start = [gettimeofday()];
+
+# first a non-dnssec query
+#
+my $res = new Net::DNS::Resolver;
+$res->nameserver($opts{H});
+$res->udp_timeout($opts{t});
+$res->recurse(1);
+$res->dnssec(0);
+#$res->udppacketsize(4096);
+my $pkt = $res->send($opts{Z}, $opts{T});
+warning($res->errorstring) unless ($pkt);
+
+# then a dnssec query
+#
+$res->dnssec(1);
+#$res->udppacketsize(4096);
+$pkt = $res->send($opts{Z}, $opts{T});
+critical($res->errorstring) unless ($pkt);
+critical($opts{H} . " did not validate the ". $opts{Z} . "/" . $opts{T} . " response") unless $pkt->header->ad;
+
+$stop = [gettimeofday()];
+success($opts{H} . " validated the ". $opts{Z} . "/" . $opts{T} . " response");
