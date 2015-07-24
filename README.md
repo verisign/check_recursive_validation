@@ -1,6 +1,6 @@
 check_recursive_validation
 ==========================
-Nagios plugin to check validation status of a recursive name server.  The plugin assumes the recursive name server is configured for validation.
+Nagios plugin to check validation status of a recursive name server.  The plugin assumes the recursive name server is configured for validation.  It does not assume the name being queried is signed.  In other words, the tool returns errors only for incorrectly signed names, but not for unsigned names.
 
 The plugin sends one or more queries (./DNSKEY by default) to a recursive name server.  If the first response comes back with NOERROR and AD=1, the plugin reports a validation SUCCESS.  If the first response comes back with NOERROR and AD=0, it reports an unvalidated SUCCESS.
 
