@@ -2,9 +2,13 @@ check_recursive_validation
 ==========================
 Nagios plugin to check validation status of a recursive name server.
 
-The plugin sends two queries (./DNSKEY by default) to a recursive name server.  The first query is sent with DO=0 (validation disabled).  If this query fails, the plugin returns a WARNING.
+The plugin sends one or more queries (./DNSKEY by default) to a recursive name server.  If the first response comes back with AD=1, the plugin reports SUCCESS.
 
-The second query is sent with DO=1 (validation enabled).  If this query fails, or if the response does not have AD=1, the plugin returns a CRITICAL error.
+If the first response comes back as SERVFAIL, the plugin sends another query with CD=1.  If the second response comes back, the plugin assumes the first error was due to a DNSSEC validation problem and it reports a CRITICAL error.  However, if the second response also comes back as SERVFAIL, the plugin returns a WARNING for general resolution failure.
+
+Timeouts generate a WARNING.
+
+All other responses generate a CRITICAL error.
 
 requirements
 ------------
