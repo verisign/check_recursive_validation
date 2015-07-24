@@ -101,25 +101,34 @@ sub critical {
 
 $start = [gettimeofday()];
 
-# first a non-dnssec query
+# set up the resolver
 #
 my $res = new Net::DNS::Resolver;
 $res->nameserver($opts{H});
 $res->udp_timeout($opts{t});
 $res->recurse(1);
-$res->dnssec(0);
-#$res->udppacketsize(4096);
-my $pkt = $res->send($opts{Z}, $opts{T});
-warning($res->errorstring) unless ($pkt);
 
-# then a dnssec query
+# try "normal" query first
 #
 $res->dnssec(1);
-#$res->udppacketsize(4096);
-$pkt = $res->send($opts{Z}, $opts{T});
-critical($res->errorstring) unless ($pkt);
-critical($opts{H} . " returned " . $pkt->header->rcode) unless 'NOERROR' eq $pkt->header->rcode;
-critical($opts{H} . " did not validate the ". $opts{Z} . "/" . $opts{T} . " response") unless $pkt->header->ad;
+$res->adflag(1);
+my $pkt = $res->send($opts{Z}, $opts{T});
+warning($res->errorstring) unless ($pkt);	# timeout
+success($opts{H} . " returned a validated " . $opts{Z} . "/" . $opts{T} . " response") if 'NOERROR' eq $pkt->header->rcode && $pkt->header->ad;
+success($opts{H} . " returned an unvalidated " . $opts{Z} . "/" . $opts{T} . " response") if 'NOERROR' eq $pkt->header->rcode;
 
-$stop = [gettimeofday()];
-success($opts{H} . " validated the ". $opts{Z} . "/" . $opts{T} . " response");
+# Here RCODE is not NOERROR.  If its also not SERVFAIL then bail early
+#
+critical($opts{H} . " returned unexpected " . $pkt->header->rcode . " " . $opts{Z} . "/" . $opts{T} . " response") unless 'SERVFAIL' eq $pkt->header->rcode;
+
+#
+# either zone is failing all resoultion, or its a dnssec problem
+# if failing due to dnssec a CD=1 query should return success
+#
+$res->dnssec(1);
+$res->adflag(0);
+$res->cdflag(1);
+$pkt = $res->send($opts{Z}, $opts{T});
+warning($res->errorstring) unless ($pkt);	# timeout
+critical($opts{Z} . "/" . $opts{T} . " seems to be incorrectly signed") if 'NOERROR' eq $pkt->header->rcode;
+warning($opts{H} . " cannot communicate with " . $opts{Z} . " name servers");
