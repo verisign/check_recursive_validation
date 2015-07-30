@@ -13,7 +13,7 @@ All other responses generate a CRITICAL error.
 requirements
 ------------
 * Perl
-* Net::DNS module
+* Net::DNS module (`apt-get install libnet-dns-sec-perl` in Debian/Ubuntu)
 
 
 usage
